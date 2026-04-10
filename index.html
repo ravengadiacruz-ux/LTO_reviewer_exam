@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LTO Exam Simulation</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
+        
+        /* Exam Header */
+        .exam-header { 
+            position: sticky; top: 0; background: #1a73e8; color: white; 
+            padding: 15px 25px; border-radius: 8px; margin-bottom: 30px; 
+            display: flex; justify-content: space-between; align-items: center; z-index: 100;
+        }
+        .timer { font-size: 1.2rem; font-weight: bold; font-family: monospace; }
+
+        /* Questions */
+        .question-block { border-bottom: 1px solid #eee; padding: 20px 0; }
+        .question-text { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; display: block; }
+        .options { display: flex; flex-direction: column; gap: 10px; }
+        .btn { padding: 12px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; text-align: left; background: white; transition: 0.2s; font-size: 1rem; }
+        .btn:hover:not(.disabled) { border-color: #1a73e8; background: #f1f7fe; }
+        
+        /* Instant Feedback */
+        .correct { background-color: #d4edda !important; border-color: #28a745 !important; color: #155724; }
+        .wrong { background-color: #f8d7da !important; border-color: #dc3545 !important; color: #721c24; }
+        .disabled { pointer-events: none; }
+        .feedback { margin-top: 10px; padding: 10px; border-radius: 5px; font-weight: bold; display: none; }
+        .show { display: block; }
+
+        /* Submit Section */
+        #submit-area { text-align: center; margin-top: 40px; }
+        .submit-btn { background: #28a745; color: white; border: none; padding: 15px 40px; font-size: 1.2rem; border-radius: 8px; cursor: pointer; }
+        .submit-btn:hover { background: #218838; }
+
+        /* Results Modal */
+        #results-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.85); display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .results-box { background: white; padding: 40px; border-radius: 15px; text-align: center; max-width: 400px; width: 90%; }
+        .passed { color: #28a745; font-size: 2rem; }
+        .failed { color: #dc3545; font-size: 2rem; }
+        .retake-btn { background: #1a73e8; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; margin-top: 20px; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="exam-header">
+        <div style="font-weight: bold;">LTO Official Exam Bank</div>
+        <div class="timer">Time Remaining: <span id="timer-display">30:00</span></div>
+    </div>
+
+    <div id="quiz-container"></div>
+
+    <div id="submit-area">
+        <button class="submit-btn" onclick="showResults()">Submit Exam</button>
+    </div>
+</div>
+
+<div id="results-overlay">
+    <div class="results-box">
+        <div id="result-status"></div>
+        <p style="font-size: 1.2rem; margin: 20px 0;">
+            Your Score: <span id="final-score" style="font-weight:bold;">0</span> / 100<br>
+            Time Elapsed: <span id="time-taken">0</span>
+        </p>
+        <button class="retake-btn" onclick="retakeExam()">Retake Exam</button>
+    </div>
+</div>
+
+<script>
+const masterQuestions = [
+    { q: "1. Kung magpaparada ka paakyat sa kalsada na walang gutter (curb), saan mo itutok ang gulong?", a: ["Sa gilid ng kalsada", "Sa gitna ng kalsada", "Sa dulo ng kalsada"], c: 0 },
+    { q: "2. Nakakita ka ng dilaw (amber) na ilaw sa unahan. Aling ilaw ang susunod na iilaw?", a: ["Pulang ilaw sa gitna", "Pulang ilaw sa ibaba", "Pulang ilaw sa itaas"], c: 2 },
+    { q: "3. Kung inaantok ka habang nagmamaneho, ano ang dapat mong gawin?", a: ["Buksan ang aircon", "Isara ang bintana", "Huminto at magpahinga agad"], c: 2 },
+    { q: "4. Kung papalapit ka sa interseksyon na walang pulis, kanino ka dapat magbigay-daan?", a: ["Sa trapikong galing kaliwa", "Sa trapikong galing kanan", "Sa kasalubong"], c: 1 },
+    { q: "5. Sino ang may prayoridad sa right-of-way?", a: ["Fire truck na naka-siren", "Malalaking bus", "Articulated trucks"], c: 0 },
+    { q: "6. Alin sa mga sumusunod ang paglabag sa hindi pagsunod sa traffic signals?", a: ["Ilegal na pagparada", "Pagsakay at pagbaba", "Paglabag sa pulang ilaw"], c: 2 },
+    { q: "7. Ano ang dapat isaalang-alang sa paghahanap ng parking space?", a: ["Angkop na espasyo sa tamang area", "Espasyo sa kabilang side", "Pinakamalapit sa pupuntahan"], c: 0 },
+    { q: "8. Ano ang ibig sabihin ng (Bawal Kumanan)?", a: ["Bawal kumanan", "Kurbada pakanan", "Walang trapiko mula kanan"], c: 0 },
+    { q: "9. Ano ang ibig sabihin ng (Double Curve)?", a: ["Mapanganib na kurbada", "Dobleng kurbada pakanan", "Dobleng kurbada pakaliwa"], c: 2 },
+    { q: "10. Ano ang gagawin kung may sasakyang masyadong malapit sa likod mo?", a: ["Pindutin ang preno bigla", "Pabilisin ang takbo", "Bumagal at magbigay signal para lumampas siya"], c: 2 },
+    { q: "11. Saan ka maaaring mag-overtake sa one-way na kalsada?", a: ["Sa kanan o kaliwa", "Hindi pinapayagan", "Sa kaliwa lamang"], c: 0 },
+    { q: "12. Ano ang kulay ng ilaw ng preno?", a: ["Dilaw", "Pula", "Berde"], c: 1 },
+    { q: "13. Epekto ng pagpalit ng headlight sa hindi inirekomendang bulb (LED/High Wattage)?", a: ["Nakakagulo sa motorista at labag sa batas", "Nakakagulo sa pasahero", "Mas malinaw na paningin"], c: 0 },
+    { q: "14. Paano mo inaalagaan ang kable ng preno, silinyador, at clutch?", a: ["Ibabad sa langis ng makina", "Ibabad sa gasolina", "Hugasan ng sabon at tubig"], c: 0 },
+    { q: "15. Ano ang ibig sabihin ng (Intersection Sign)?", a: ["Papalapit sa interseksyon", "May highway sa unahan", "May nagsasanib na trapiko"], c: 0 },
+    { q: "16. Anong inumin ang makakaapekto sa pagmamaneho nang pinakamalala?", a: ["Tubig", "Juice", "Alak"], c: 2 },
+    { q: "17. Ang kumikislap na dilaw na traffic light ay nangangahulugang:", a: ["Magbagal at mag-ingat", "May tatawid", "May right-of-way ka"], c: 0 },
+    { q: "18. Sa stop line bago ang pedestrian lane, ang drayber ay dapat:", a: ["Apakan ang preno", "Umusad", "Huminto"], c: 2 },
+    { q: "19. Saan makikita ang karatulang (Intersection Location)?", a: ["Sa interseksyon", "Sa makitid na kalsada", "Bago pumasok sa expressway"], c: 0 },
+    { q: "20. Multa sa unang paglabag sa pagpayag sa batang 6 pababa sa front seat?", a: ["Php 1,500", "Php 2,000", "Php 1,000"], c: 2 },
+    { q: "21. Ano ang hindi dapat gawin sa hospital zone?", a: ["Buksan ang headlight", "Bumusina", "Buksan ang hazard"], c: 1 },
+    { q: "22. Karatulang (Steep Descent) ay:", a: ["Paakyat", "May humps", "Pababang kalsada"], c: 2 },
+    { q: "23. Hand signal kapag kakanan:", a: ["Braso pakanan", "Braso pababa", "Kaliwang braso nakaturo pataas"], c: 2 },
+    { q: "24. Hindi sigurado sa gamot sa ubo, ano ang gagawin?", a: ["Tanong sa kaibigan", "Konsulta sa doktor/basahin ang label", "Maneho lang"], c: 1 },
+    { q: "25. Kelan madalas ang aksidente sa school service?", a: ["Pagbaba sa loob", "Pagtawid ng bata pagkababa", "Pagsakay sa loob"], c: 1 },
+    { q: "26. Totoo ba na ang student-driver ay walang violation?", a: ["Totoo", "Mali, pwedeng tiketan ang student", "Mali, pro lang ang pwedeng tiketan"], c: 1 },
+    { q: "27. Ano pa ang nakakaapekto sa pagmamaneho bukod sa alak?", a: ["Malakas na musika", "Ipinagbabawal na droga", "Pagkain habang nagmamaneho"], c: 1 },
+    { q: "28. Karatulang (No Overtaking):", a: ["Bawal mag-overtake", "Manatili sa linya", "Dalawang linya dapat"], c: 0 },
+    { q: "29. Aling sign ang 'No Entry'?", a: ["A", "B (Red circle with white bar)", "C"], c: 1 },
+    { q: "30. Dilaw na ilaw, ano ang susunod?", a: ["Asul", "Amber", "Pula"], c: 2 },
+    { q: "31. Papalapit sa siklista, ano ang gagawin?", a: ["Bumagal at hayaang makaliko", "Flash ng headlight", "Lampasan sa kaliwa"], c: 0 },
+    { q: "32. Kailan pwedeng kumaliwa sa intersection na may traffic light?", a: ["Pag green arrow pakaliwa", "Pag diretso na ang iba", "Pag pula ang ilaw"], c: 0 },
+    { q: "33. Signal na nagbababala ng panganib sa unahan:", a: ["Kumukurap na dilaw", "Kumukurap na pula", "Kumukurap na berde"], c: 1 },
+    { q: "34. Karatulang (No U-Turn):", a: ["Bawal mag-U-turn", "Kurba pakaliwa", "Kurba pakanan"], c: 0 },
+    { q: "35. Kailan pwedeng gamitin ang mobile phone?", a: ["Pag umaandar", "Pag naka-pula ang ilaw", "Pag nakatigil sa ligtas na gilid"], c: 2 },
+    { q: "36. Karatulang (Broken Bridge):", a: ["Makitid na tulay", "Swing bridge", "Sirang tulay"], c: 2 },
+    { q: "37. Kulay ng pavement marking na naghihiwalay sa maraming linya?", a: ["Puti", "Pula", "Kahel"], c: 0 },
+    { q: "38. Karatulang (Road Narrows Ahead):", a: ["Makitid sa unahan", "Madulas na kalsada", "Malapad na kalsada"], c: 0 },
+    { q: "39. Kailan gagamit ng busina?", a: ["Balaan ang iba sa iyong presensya", "Tawagin ang kaibigan", "Para mauna"], c: 0 },
+    { q: "40. Pag may sasakyang tumawid sa linya mo para mag-overtake:", a: ["Open headlight", "Handang bumagal o huminto", "Bumusina at bilisan"], c: 1 },
+    { q: "41. Maaaring mag-overtake sa highway kung:", a: ["Putol-putol na puting linya", "Tuloy-tuloy na puti", "Tuloy-tuloy na dilaw"], c: 0 },
+    { q: "42. Saan bawal ang pag-overtake?", a: ["Expressway", "Interseksyon", "Tulay"], c: 1 },
+    { q: "43. Kumukurap na dilaw na ilaw:", a: ["Bumagal at mag-ingat", "Tawiran ng tao", "Huminto muna"], c: 0 },
+    { q: "44. Tumatalbog ang sasakyan pag nag-preno:", a: ["Sira ang gulong", "Maling manibela", "Sira na shock absorbers"], c: 2 },
+    { q: "45. Karatulang (Curve Warning):", a: ["Huminto", "Magmaneho dahan-dahan dahil may kurba", "Maghanap ng pinto"], c: 1 },
+    { q: "46. Kelan gagamit ng busina?", a: ["Tawag ng kaibigan", "Para mauna", "Balaan ang iba"], c: 2 },
+    { q: "47. School bus naka-hazard sa kabilang side ng highway:", a: ["Huminto muna", "Huminto hanggang mawala ang ilaw", "Hindi, pero magbagal"], c: 2 },
+    { q: "48. Payo sa driver na uminom ng konti:", a: ["Wag magmaneho", "Maneho dahan-dahan", "Kape muna"], c: 0 },
+    { q: "49. Overtake sa burol/tulay ay pwedeng maliban kung:", a: ["Kita ang daan (150m)", "Kita ang daan (75m)", "Kita ang daan (100m)"], c: 0 },
+    { q: "50. Karatulang (Road Works):", a: ["End ng expressway", "Mababang tulay", "May ginagawang kalsada"], c: 2 },
+    { q: "51. Karatulang (No Overtaking):", a: ["Bawal huminto", "Bawal motor", "Bawal mag-overtake"], c: 2 },
+    { q: "52. Karatulang (Curve Ahead):", a: ["Bawal lumiko bigla", "Magpalit ng linya", "Mapanganib na kurba"], c: 2 },
+    { q: "53. Karatulang (Curve Right):", a: ["Kurba pakaliwa", "Kurba pakanan", "Mapanganib na kurba"], c: 1 },
+    { q: "54. Minimum safe following distance:", a: ["4 segundo", "2 segundo", "6 segundo"], c: 1 },
+    { q: "55. Siren sa likod habang nasa intersection:", a: ["Huminto", "Umatras", "Dumaan muna bago tumabi"], c: 2 },
+    { q: "56. Kaliwang braso nakaturo pakaliwa:", a: ["Kakaliwa", "Kakanan", "Hihinto"], c: 0 },
+    { q: "57. Barado ang daan sa unahan ng intersection:", a: ["Lumapit sa harap", "Huminto bago intersection", "Dahan-dahan pumasok"], c: 1 },
+    { q: "58. Epekto ng alak/droga:", a: ["Mataas na kamalayan", "Kulang kontrol/maling tiwala", "Mabilis reaksyon"], c: 1 },
+    { q: "59. Karatulang (Merge Left) sa expressway:", a: ["Lipat sa kaliwa", "Labas sa exit", "Lipat sa shoulder"], c: 0 },
+    { q: "60. Nakakasira ng konsentrasyon bukod sa alak:", a: ["Droga/pagod/musika", "Traffic lights", "Pavement markings"], c: 0 },
+    { q: "61. Bolang gumulong sa likod ng nakaparadang sasakyan:", a: ["Bilisan", "Bumagal", "Bumusina"], c: 1 },
+    { q: "62. Pag-inom ng alak ay:", a: ["Pabilis ng reaksyon", "Pabagal ng reaksyon/maling paghusga", "Paganda ng alerto"], c: 1 },
+    { q: "63. Signal ng panganib sa unahan:", a: ["Kumikislap na pula", "Kumikislap na berde", "Kumikislap na dilaw"], c: 0 },
+    { q: "64. Kelan nagkakaroon ng road rage?", a: ["Pag walang alam sa batas", "Walang nang-asar", "Pag may nagsimulang mang-provoka"], c: 2 },
+    { q: "65. Pinakakanang linya sa 3-lane expressway:", a: ["Normal na maneho", "Mababagal na sasakyan", "Sirang sasakyan lamang"], c: 1 },
+    { q: "66. Hand signal pakanan:", a: ["Kaliwang braso pataas", "Braso pababa", "Braso pahalang"], c: 0 },
+    { q: "67. Kelan gagamit ng unang linya (expressway):", a: ["Pag mabagal", "Pag mag-oovertake", "Pag mabilis"], c: 1 },
+    { q: "68. Karatulang (No Entry):", a: ["One-way", "Diretso", "Bawal pumasok lahat"], c: 2 },
+    { q: "69. Solid yellow line:", a: ["Overtake ok", "Bawal mag-overtake", "Bawal tumawid"], c: 1 },
+    { q: "70. Pulang X sa bawat linya (expressway):", a: ["Huminto/maghintay", "Punta sa lay-by", "Labas sa exit"], c: 0 },
+    { q: "71. Dokumentong kailangang dala:", a: ["Fare Matrix", "Valid DL/Rehistro/Insurance", "DL lang"], c: 1 },
+    { q: "72. Huminto sa expressway kapag:", a: ["Tanong direksyon", "Magbaba ng tao", "Emergency/Lay-by"], c: 2 },
+    { q: "73. Pagparada sa tabi ng nakaparadang sasakyan:", a: ["Triple fee", "Harang sa trapiko", "Double fee"], c: 1 },
+    { q: "74. Signal distance bago lumipat ng linya:", a: ["30 metro", "5 metro", "50 metro"], c: 0 },
+    { q: "75. Safety accessory pag iiwan ang sasakyan:", a: ["Parking brake", "Headlight", "Busina"], c: 0 },
+    { q: "76. Tama tungkol sa seat belt:", a: ["Driver lang", "Front seat lang", "Nakakapagligtas ng buhay"], c: 2 },
+    { q: "77. Sign na 'Give Way':", a: ["A", "B (Inverted Triangle)", "C"], c: 1 },
+    { q: "78. Harapin ang tailgater:", a: ["Bilisan", "Wag pansinin", "Bumagal/paunahin"], c: 2 },
+    { q: "79. Sino magbibigay daan sa intersection (no light):", a: ["Unang bumagal", "Unang dumating", "Huling dumating"], c: 2 },
+    { q: "80. VIN ay para sa:", a: ["Important Drivers", "Impormasyon ng Sasakyan", "Vehicle Identification Number"], c: 2 },
+    { q: "81. Flash ng headlight ng iba:", a: ["Speed trap", "Bigay daan", "Balaan ka sa presensya nila"], c: 2 },
+    { q: "82. Paghanda sa pagliko:", a: ["Bawasan ang bilis", "Huminto 6m bago kanto", "Wag magpalit linya"], c: 0 },
+    { q: "83. Karatulang (Merging Traffic):", a: ["Interseksyon kalsada", "Nagsasanib na daloy ng trapiko", "Highway intersection"], c: 1 },
+    { q: "84. Signs para sa regulasyon/pagbabawal:", a: ["A (Regulatory)", "B", "C"], c: 0 },
+    { q: "85. Rumble strips ay para sa:", a: ["Wag antukin", "Yugin ang sasakyan", "Paalalang magbawas ng bilis"], c: 2 },
+    { q: "86. Pag may lumalampas sa kaliwa mo:", a: ["Bawasan bilis/lipat linya", "Manatili sa kanan/maintain speed", "Huminto"], c: 1 },
+    { q: "87. Pagpapatakbo ng may blinking lights:", a: ["Sagabal", "Delikado", "Ilegal na pagbabago"], c: 2 },
+    { q: "88. Bago lumipat ng linya sa gabi/ulan:", a: ["Busina", "Iikot ang ulo/check blindspot", "Flash headlight"], c: 1 },
+    { q: "89. 60 years old apply ng license:", a: ["Hindi", "Depende sa medical/test", "Oo"], c: 1 },
+    { q: "90. Sapilitang insurance:", a: ["Lahat", "Komprehensibo", "TPL"], c: 2 },
+    { q: "91. Karatulang (Two-way Traffic):", a: ["Bigay daan", "End ng 2-way", "Two-way traffic"], c: 2 },
+    { q: "92. Kulay ng bandila sa karga:", a: ["Pula", "Dilaw", "Berde"], c: 0 },
+    { q: "93. Tumama sa poste dahil:", a: ["Overtake", "Mabilis/nawalan ng kontrol", "Walang preno"], c: 1 },
+    { q: "94. Premium gas ay pwedeng:", a: ["Dulas clutch", "Konsumo langis", "Pag-init ng makina"], c: 2 },
+    { q: "95. Nakakasira ng konsentrasyon:", a: ["Side mirror", "Malakas na musika", "Wiper wash"], c: 1 },
+    { q: "96. Pulang X sa toll gate:", a: ["Pwedeng dumaan", "Bawal dumaan", "Alis sa lane"], c: 1 },
+    { q: "97. Priority sa makitid na matirik na kalsada:", a: ["Mabilis", "Paakyat", "Flash headlight"], c: 1 },
+    { q: "98. Wag u-musad kahit green pag:", a: ["Lilikong kanan", "May tao sa pedestrian", "Interseksyon ay barado sa labasan"], c: 2 },
+    { q: "99. Iwan ang sasakyang naka-andar:", a: ["5 mins lang", "40 kph area", "Hindi kailanman"], c: 2 },
+    { q: "100. Sa rotonda, sino may priyoridad?", a: ["May green light", "Nasa loob na ng rotonda", "Papasok pa lang"], c: 1 }
+];
+
+let score = 0;
+let timeLeft = 1800; // 30 minutes in seconds
+let timerId;
+
+function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+function startTimer() {
+    clearInterval(timerId);
+    timerId = setInterval(() => {
+        if (timeLeft <= 0) {
+            clearInterval(timerId);
+            showResults();
+        } else {
+            timeLeft--;
+            let mins = Math.floor(timeLeft / 60);
+            let secs = timeLeft % 60;
+            document.getElementById('timer-display').innerText = 
+                `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+    }, 1000);
+}
+
+function initExam() {
+    score = 0;
+    timeLeft = 1800;
+    document.getElementById('quiz-container').innerHTML = '';
+    document.getElementById('results-overlay').style.display = 'none';
+
+    const shuffled = shuffle([...masterQuestions]);
+
+    shuffled.forEach((item, index) => {
+        const block = document.createElement('div');
+        block.className = 'question-block';
+        
+        const opts = item.a.map((opt, i) => 
+            `<button class="btn" onclick="checkAnswer(this, ${index}, ${i}, ${item.c})">${opt}</button>`
+        ).join('');
+
+        block.innerHTML = `
+            <span class="question-text">${index + 1}. ${item.q.split('. ')[1] || item.q}</span>
+            <div class="options" id="opt-grp-${index}">${opts}</div>
+            <div class="feedback" id="feed-${index}"></div>
+        `;
+        document.getElementById('quiz-container').appendChild(block);
+    });
+
+    startTimer();
+    window.scrollTo(0,0);
+}
+
+function checkAnswer(btn, qIdx, selected, correct) {
+    const group = document.getElementById(`opt-grp-${qIdx}`);
+    const feedback = document.getElementById(`feed-${qIdx}`);
+    const btns = group.querySelectorAll('.btn');
+
+    btns.forEach(b => b.classList.add('disabled'));
+
+    if (selected === correct) {
+        btn.classList.add('correct');
+        feedback.innerHTML = "✓ Tama!";
+        feedback.className = "feedback show correct";
+        score++;
+    } else {
+        btn.classList.add('wrong');
+        btns[correct].classList.add('correct');
+        feedback.innerHTML = "✗ Mali. Ang tama ay: " + btns[correct].innerText;
+        feedback.className = "feedback show wrong";
+    }
+}
+
+function showResults() {
+    clearInterval(timerId);
+    const totalTime = 1800 - timeLeft;
+    const minsTaken = Math.floor(totalTime / 60);
+    const secsTaken = totalTime % 60;
+
+    document.getElementById('final-score').innerText = score;
+    document.getElementById('time-taken').innerText = `${minsTaken}m ${secsTaken}s`;
+    
+    const status = document.getElementById('result-status');
+    if (score >= 80) { // 80 is the passing score for 100 items
+        status.innerHTML = '<span class="passed">PASSED!</span>';
+    } else {
+        status.innerHTML = '<span class="failed">FAILED</span>';
+    }
+
+    document.getElementById('results-overlay').style.display = 'flex';
+}
+
+function retakeExam() {
+    initExam();
+}
+
+// Kick off
+initExam();
+</script>
+
+</body>
+</html>
