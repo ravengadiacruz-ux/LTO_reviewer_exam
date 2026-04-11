@@ -368,10 +368,15 @@ function initExam() {
         const block = document.createElement('div');
         block.className = 'question-block';
 
+        // 1. Dito natin idadagdag ang logic para sa main question image
+        let questionImgHTML = '';
+        if (item.img) {
+            questionImgHTML = `<img src="${item.img}" class="question-image" alt="Traffic Sign">`;
+        }
+
         let optionsHTML = '';
 
         if (item.type === "image-choice") {
-            // Logic for IMAGE choices in a GRID
             const gridItems = item.a.map((imgSrc, i) => `
                 <button class="btn btn-image" onclick="checkAnswer(this, ${index}, ${i}, ${item.c})">
                     <img src="${imgSrc}" class="choice-img">
@@ -380,15 +385,16 @@ function initExam() {
             `).join('');
             optionsHTML = `<div class="options-grid" id="opt-grp-${index}">${gridItems}</div>`;
         } else {
-            // Logic for regular TEXT choices
             const textItems = item.a.map((opt, i) => 
                 `<button class="btn" onclick="checkAnswer(this, ${index}, ${i}, ${item.c})">${opt}</button>`
             ).join('');
             optionsHTML = `<div class="options" id="opt-grp-${index}">${textItems}</div>`;
         }
 
+        // 2. Isasama na natin ang ${questionImgHTML} sa loob ng block
         block.innerHTML = `
             <span class="question-text">${index + 1}. ${item.q.split('. ')[1] || item.q}</span>
+            ${questionImgHTML}
             ${optionsHTML}
             <div class="feedback" id="feed-${index}"></div>
         `;
